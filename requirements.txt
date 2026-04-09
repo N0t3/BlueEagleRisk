@@ -1,0 +1,7 @@
+streamlit
+st-gsheets-connection
+yfinance
+pandas
+numpy
+scipy
+statsmodels
