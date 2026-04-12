@@ -41,20 +41,21 @@ DIVERGING_CMAP = LinearSegmentedColormap.from_list(
     'bec_diverging', [COLORS['RED'], '#f5f5f5', COLORS['NAVY']]
 )
 
-# Logo — header only, not on individual charts
-LOGO_FILENAME  = "Blue Circle Icon.png"
-possible_paths = [
-    LOGO_FILENAME,
-    os.path.join(os.path.expanduser("~"), "Downloads", LOGO_FILENAME),
-    os.path.join("C:", "Users", "Public", "Downloads", LOGO_FILENAME),
-]
+# ==========================================
+# LOGO CONFIGURATION (Safe Cloud Loading)
+# ==========================================
+LOGO_FILENAME = "Blue Circle Icon.png"
 LOGO_PATH = None
-for p in possible_paths:
-    if os.path.exists(p):
-        LOGO_PATH = p
-        break
 
-
+try:
+    # Only look in the local GitHub folder. 
+    # If the OS throws any error (like a PermissionError), drop down to the except block.
+    if os.path.exists(LOGO_FILENAME):
+        LOGO_PATH = LOGO_FILENAME
+except Exception:
+    # Default to no image
+    LOGO_PATH = None
+    
 def styled_fig(figsize):
     fig, ax = plt.subplots(figsize=figsize)
     fig.patch.set_facecolor(COLORS['BG'])
@@ -149,7 +150,7 @@ try:
         st.sidebar.write(f"**Gross Exposure:** ${equity_value:,.2f}")
 
 except Exception as e:
-    st.sidebar.error(f"Failed to connect. Error Type: {type(e).__name__} | Details: {repr(e)}")
+    st.sidebar.error(f"Failed to connect to data source. Error: {e}")
     st.stop()
 
 confidence_level = st.sidebar.slider("Confidence Level", 0.90, 0.99, 0.95)
