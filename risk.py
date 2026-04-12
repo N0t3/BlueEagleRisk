@@ -101,20 +101,22 @@ with hdr_col:
 with logo_col:
     if LOGO_PATH:
         st.image(LOGO_PATH, width=80)
-
 # ==========================================
-# 2. Portfolio Data Ingestion
+# 2. Portfolio Data Ingestion (Public CSV Bypass)
 # ==========================================
 st.sidebar.header("Portfolio Parameters")
-conn      = st.connection("gsheets", type=GSheetsConnection)
-sheet_url = (
-    "https://docs.google.com/spreadsheets/d/"
-    "11Fpu0mz2JevRHzqrvgR-TrC78qbALWAS1Yp8C2gEi4U/edit#gid=418083832"
-)
+
+# The specific ID of your Google Sheet
+sheet_id = "11Fpu0mz2JevRHzqrvgR-TrC78qbALWAS1Yp8C2gEi4U"
+# The specific GID of the active tab
+tab_gid = "418083832"
+# Format as a direct CSV download link
+csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={tab_gid}"
 
 try:
     with st.spinner("Fetching active portfolio data..."):
-        portfolio_data         = conn.read(spreadsheet=sheet_url, ttl="10m")
+        # Read directly via pandas, bypassing Google API authentication
+        portfolio_data = pd.read_csv(csv_url)
         portfolio_data.columns = portfolio_data.columns.str.strip()
 
         df = portfolio_data[['Date', 'Ticker', 'Value', '% Return']].copy()
@@ -191,6 +193,39 @@ def load_deep_history(port_tickers, factor_dict, mag7_tickers):
 
 with st.spinner("Compiling historical market and factor data..."):
     full_returns = load_deep_history(tickers, standard_proxies, mag7_components)
+
+# #region agent log
+import json as _agent_json
+import time as _agent_time
+
+try:
+    _g = globals()
+    with open("/Users/chipkoch/Desktop/.cursor/debug-b93751.log", "a") as _agent_f:
+        _agent_f.write(
+            _agent_json.dumps(
+                {
+                    "sessionId": "b93751",
+                    "runId": "post-fix",
+                    "hypothesisId": "H1-H3",
+                    "location": "risk1.py:before_regression_slice",
+                    "message": "globals_and_returns_shape",
+                    "data": {
+                        "has_start_date": "start_date" in _g,
+                        "has_end_date": "end_date" in _g,
+                        "has_lookback_years": "lookback_years" in _g,
+                        "has_confidence_level": "confidence_level" in _g,
+                        "has_rf_rate": "rf_rate" in _g,
+                        "full_returns_rows": int(getattr(full_returns, "shape", (0,))[0]),
+                        "full_returns_cols": int(getattr(full_returns, "shape", (0, 0))[1]),
+                    },
+                    "timestamp": int(_agent_time.time() * 1000),
+                }
+            )
+            + "\n"
+        )
+except Exception:
+    pass
+# #endregion
 
 regression_returns = full_returns.loc[
     pd.to_datetime(start_date):pd.to_datetime(end_date)
