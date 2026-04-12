@@ -148,8 +148,8 @@ try:
         st.sidebar.success("Active portfolio data loaded.")
         st.sidebar.write(f"**Gross Exposure:** ${equity_value:,.2f}")
 
-except Exception:
-    st.sidebar.error("Failed to connect to data source.")
+except Exception as e:
+    st.sidebar.error(f"Failed to connect to data source. Error: {e}")
     st.stop()
 
 confidence_level = st.sidebar.slider("Confidence Level", 0.90, 0.99, 0.95)
