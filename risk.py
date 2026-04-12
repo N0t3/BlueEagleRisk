@@ -67,6 +67,46 @@ def styled_fig(figsize):
     return fig, ax
 
 
+def _yahoo_symbol(sym: str) -> str:
+    """Match Yahoo Finance listing style (uppercase; class shares use '-')."""
+    s = str(sym).strip().upper()
+    return s.replace(".", "-") if s else s
+
+
+def _window_factor_col(name: str) -> str:
+    """Column name in price/returns frame (ETFs normalized; synthetic factors unchanged)."""
+    return name if name == "Mag_7_Proxy" else _yahoo_symbol(name)
+
+
+def _extract_close_prices(raw: pd.DataFrame, symbols: list) -> pd.DataFrame:
+    """
+    Normalize yfinance download output to a single DataFrame of close prices
+    with one column per symbol (handles MultiIndex vs flat columns).
+    """
+    syms = [_yahoo_symbol(s) for s in symbols]
+    if raw is None or raw.empty:
+        return pd.DataFrame(columns=syms)
+
+    if isinstance(raw.columns, pd.MultiIndex):
+        top = raw.columns.get_level_values(0).unique()
+        price_key = "Close" if "Close" in top else ("Adj Close" if "Adj Close" in top else top[0])
+        panel = raw[price_key].copy()
+        if isinstance(panel, pd.Series):
+            panel = panel.to_frame(name=syms[0])
+        panel.columns = [_yahoo_symbol(c) for c in panel.columns]
+    else:
+        if "Close" not in raw.columns:
+            return pd.DataFrame(columns=syms)
+        col = raw["Close"]
+        panel = col.to_frame(name=syms[0]) if isinstance(col, pd.Series) else col.copy()
+        if panel.shape[1] == 1 and syms:
+            panel.columns = [syms[0]]
+        else:
+            panel.columns = [_yahoo_symbol(c) for c in panel.columns]
+
+    return panel.reindex(columns=syms)
+
+
 # ==========================================
 # ORTHOGONALIZATION — Gram-Schmidt / Sequential OLS
 # ==========================================
@@ -155,7 +195,9 @@ try:
         equity_value = equity_df['Value'].sum()
         equity_df['Active_Weight'] = equity_df['Value'] / equity_value
 
-        tickers        = equity_df['Ticker'].astype(str).str.strip().tolist()
+        tickers        = [
+            _yahoo_symbol(t) for t in equity_df['Ticker'].astype(str).str.strip().tolist()
+        ]
         weights        = np.array(equity_df['Active_Weight'].tolist())
         actual_returns = np.array(equity_df['% Return'].fillna(0.0).tolist())
 
@@ -193,17 +235,44 @@ standard_proxies = {
 
 @st.cache_data
 def load_deep_history(port_tickers, factor_dict, mag7_tickers):
-    all_symbols = list(set(port_tickers + list(factor_dict.values()) + mag7_tickers))
-    data        = yf.download(all_symbols, start="2007-01-01",
-                              end=datetime.date.today())['Close']
-    data        = data.ffill()
-    data.index  = data.index.tz_localize(None)
-    returns_df  = np.log(data / data.shift(1))
-    returns_df['Mag_7_Proxy'] = returns_df[list(mag7_tickers)].mean(axis=1)
+    raw_syms = port_tickers + list(factor_dict.values()) + list(mag7_tickers)
+    all_symbols = list(dict.fromkeys(_yahoo_symbol(s) for s in raw_syms))
+
+    raw = pd.DataFrame()
+    for attempt in range(3):
+        raw = yf.download(
+            all_symbols,
+            start="2007-01-01",
+            end=datetime.date.today(),
+            progress=False,
+            threads=False,
+        )
+        if raw is not None and not raw.empty:
+            break
+
+    data = _extract_close_prices(raw, all_symbols)
+    if data.empty or data.notna().to_numpy().sum() == 0:
+        return pd.DataFrame()
+
+    data = data.sort_index()
+    data = data[~data.index.duplicated(keep="last")]
+    data = data.ffill()
+    data.index = data.index.tz_localize(None)
+
+    returns_df = np.log(data / data.shift(1))
+    mag7_cols = [_yahoo_symbol(m) for m in mag7_tickers]
+    returns_df["Mag_7_Proxy"] = returns_df.reindex(columns=mag7_cols)[mag7_cols].mean(axis=1)
     return returns_df
 
 with st.spinner("Compiling historical market and factor data..."):
     full_returns = load_deep_history(tickers, standard_proxies, mag7_components)
+
+if full_returns is None or full_returns.empty:
+    st.error(
+        "Yahoo Finance returned no usable price data (common on cloud when rate-limited). "
+        "Wait a minute and reload, or pin a stable `yfinance` version in requirements.txt."
+    )
+    st.stop()
 
 # #region agent log
 import json as _agent_json
@@ -245,23 +314,38 @@ factor_cols = list(factor_proxies.values())
 
 _reg_start = pd.to_datetime(start_date)
 _reg_end = pd.to_datetime(end_date)
-window = full_returns.loc[_reg_start:_reg_end].copy()
+window = full_returns.sort_index().loc[_reg_start:_reg_end].copy()
 
-ts_tickers = [t for t in tickers if t in window.columns]
-missing_px = [t for t in tickers if t not in window.columns]
+factor_cols_use = [_window_factor_col(c) for c in factor_cols]
+missing_factors = [c for c, w in zip(factor_cols, factor_cols_use) if w not in window.columns]
+if missing_factors:
+    st.error(
+        "One or more factor series are missing from the Yahoo download. "
+        f"Missing: {missing_factors}. "
+        f"Sample columns: {list(window.columns)[:30]}…"
+    )
+    st.stop()
+
+ts_tickers = [
+    t
+    for t in tickers
+    if t in window.columns and window[t].notna().any()
+]
+missing_px = [t for t in tickers if t not in ts_tickers]
 if missing_px:
     st.warning(
-        "No Yahoo Finance price series for: "
+        "No usable Yahoo price history in this window for: "
         + ", ".join(missing_px)
         + ". Those holdings are excluded from time-series regressions; "
         "weights are renormalized over symbols with data."
     )
 if not ts_tickers:
-    st.error("None of the portfolio tickers matched downloaded price data.")
+    st.error("None of the portfolio tickers have usable price data in this lookback window.")
     st.stop()
 
+subset_cols = factor_cols_use + ts_tickers
 try:
-    regression_returns = window.dropna(subset=factor_cols + ts_tickers, how="any").copy()
+    regression_returns = window.dropna(subset=subset_cols, how="any").copy()
 except KeyError as e:
     st.error(
         "Market data is missing required factor or ticker columns. "
@@ -270,11 +354,13 @@ except KeyError as e:
     st.stop()
 
 if regression_returns.shape[0] == 0:
+    na_days = window[subset_cols].isna().sum().sort_values(ascending=False)
     st.error(
         "No overlapping days with complete factor and portfolio returns. "
-        "This often happens when one ticker has no price history in the lookback "
-        "window and row-wise dropna removed every row."
+        "Below: days with missing data per series in the lookback (largest first). "
+        "Fix tickers on the sheet (Yahoo symbols, e.g. BRK-B not BRK.B) or widen the window."
     )
+    st.dataframe(na_days.to_frame("missing_days"), use_container_width=True)
     st.stop()
 
 min_obs = max(30, len(factor_names) + 5)
@@ -291,7 +377,7 @@ w_ts = w_ts / w_ts.sum()
 port_component_returns = regression_returns[ts_tickers]
 portfolio_returns = port_component_returns.dot(w_ts)
 
-raw_factor_returns = regression_returns[factor_cols].copy()
+raw_factor_returns = regression_returns[factor_cols_use].copy()
 raw_factor_returns.columns = factor_names
 
 # Orthogonalized factor returns
