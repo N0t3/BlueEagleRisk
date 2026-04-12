@@ -149,7 +149,7 @@ try:
         st.sidebar.write(f"**Gross Exposure:** ${equity_value:,.2f}")
 
 except Exception as e:
-    st.sidebar.error(f"Failed to connect to data source. Error: {e}")
+    st.sidebar.error(f"Failed to connect. Error Type: {type(e).__name__} | Details: {repr(e)}")
     st.stop()
 
 confidence_level = st.sidebar.slider("Confidence Level", 0.90, 0.99, 0.95)
