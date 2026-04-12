@@ -74,15 +74,26 @@ def orthogonalize_factors(raw_factor_df: pd.DataFrame) -> pd.DataFrame:
     """
     Sequentially orthogonalize factors via OLS residuals (Gram-Schmidt).
     """
-    cols      = raw_factor_df.columns.tolist()
-    ortho_df  = pd.DataFrame(index=raw_factor_df.index)
-    ortho_df[cols[0]] = raw_factor_df[cols[0]]   # Market anchor — unchanged
+    df = (
+        raw_factor_df.dropna(how="any")
+        .apply(pd.to_numeric, errors="coerce")
+        .dropna(how="any")
+    )
+    cols = df.columns.tolist()
+    if not cols or df.shape[0] < len(cols) + 1:
+        raise ValueError(
+            f"Insufficient data for factor orthogonalization "
+            f"(rows={df.shape[0]}, factors={len(cols)})."
+        )
+
+    ortho_df = pd.DataFrame(index=df.index)
+    ortho_df[cols[0]] = df[cols[0]]  # Market anchor — unchanged
 
     for i in range(1, len(cols)):
-        y       = raw_factor_df[cols[i]]
+        y = df[cols[i]]
         X_prior = sm.add_constant(ortho_df.iloc[:, :i])
-        resid   = sm.OLS(y, X_prior).fit().resid
-        ortho_df[cols[i]] = resid                # pure residual factor
+        resid = sm.OLS(y, X_prior).fit().resid
+        ortho_df[cols[i]] = resid
 
     return ortho_df
 
@@ -227,24 +238,69 @@ except Exception:
     pass
 # #endregion
 
-regression_returns = full_returns.loc[
-    pd.to_datetime(start_date):pd.to_datetime(end_date)
-].copy().dropna()
-
-factor_proxies                   = standard_proxies.copy()
+factor_proxies = standard_proxies.copy()
 factor_proxies['Mag 7 Exposure'] = 'Mag_7_Proxy'
-factor_names                     = list(factor_proxies.keys())
+factor_names = list(factor_proxies.keys())
+factor_cols = list(factor_proxies.values())
 
-port_component_returns = regression_returns[tickers]
-portfolio_returns      = port_component_returns.dot(weights)
+_reg_start = pd.to_datetime(start_date)
+_reg_end = pd.to_datetime(end_date)
+window = full_returns.loc[_reg_start:_reg_end].copy()
 
-# Raw factor returns
-raw_factor_returns         = regression_returns[list(factor_proxies.values())]
+ts_tickers = [t for t in tickers if t in window.columns]
+missing_px = [t for t in tickers if t not in window.columns]
+if missing_px:
+    st.warning(
+        "No Yahoo Finance price series for: "
+        + ", ".join(missing_px)
+        + ". Those holdings are excluded from time-series regressions; "
+        "weights are renormalized over symbols with data."
+    )
+if not ts_tickers:
+    st.error("None of the portfolio tickers matched downloaded price data.")
+    st.stop()
+
+try:
+    regression_returns = window.dropna(subset=factor_cols + ts_tickers, how="any").copy()
+except KeyError as e:
+    st.error(
+        "Market data is missing required factor or ticker columns. "
+        f"Details: {e}"
+    )
+    st.stop()
+
+if regression_returns.shape[0] == 0:
+    st.error(
+        "No overlapping days with complete factor and portfolio returns. "
+        "This often happens when one ticker has no price history in the lookback "
+        "window and row-wise dropna removed every row."
+    )
+    st.stop()
+
+min_obs = max(30, len(factor_names) + 5)
+if regression_returns.shape[0] < min_obs:
+    st.error(
+        f"Need at least {min_obs} trading days with complete data for factor models; "
+        f"found {regression_returns.shape[0]}."
+    )
+    st.stop()
+
+w_ts = np.array([weights[tickers.index(t)] for t in ts_tickers])
+w_ts = w_ts / w_ts.sum()
+
+port_component_returns = regression_returns[ts_tickers]
+portfolio_returns = port_component_returns.dot(w_ts)
+
+raw_factor_returns = regression_returns[factor_cols].copy()
 raw_factor_returns.columns = factor_names
 
 # Orthogonalized factor returns
 with st.spinner("Orthogonalizing factors..."):
-    ortho_factor_returns = orthogonalize_factors(raw_factor_returns)
+    try:
+        ortho_factor_returns = orthogonalize_factors(raw_factor_returns)
+    except ValueError as e:
+        st.error(str(e))
+        st.stop()
 
 st.divider()
 
