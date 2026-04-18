@@ -45,17 +45,15 @@ DIVERGING_CMAP = LinearSegmentedColormap.from_list(
 # LOGO CONFIGURATION (Safe Cloud Loading)
 # ==========================================
 LOGO_FILENAME = "Blue Circle Icon.png"
-LOGO_PATH = None
+LOGO_PATH     = None
 
 try:
-    # Only look in the local GitHub folder. 
-    # If the OS throws any error (like a PermissionError), drop down to the except block.
     if os.path.exists(LOGO_FILENAME):
         LOGO_PATH = LOGO_FILENAME
 except Exception:
-    # Default to no image
     LOGO_PATH = None
-    
+
+
 def styled_fig(figsize):
     fig, ax = plt.subplots(figsize=figsize)
     fig.patch.set_facecolor(COLORS['BG'])
@@ -88,8 +86,9 @@ def _extract_close_prices(raw: pd.DataFrame, symbols: list) -> pd.DataFrame:
         return pd.DataFrame(columns=syms)
 
     if isinstance(raw.columns, pd.MultiIndex):
-        top = raw.columns.get_level_values(0).unique()
-        price_key = "Close" if "Close" in top else ("Adj Close" if "Adj Close" in top else top[0])
+        top       = raw.columns.get_level_values(0).unique()
+        price_key = ("Close" if "Close" in top
+                     else ("Adj Close" if "Adj Close" in top else top[0]))
         panel = raw[price_key].copy()
         if isinstance(panel, pd.Series):
             panel = panel.to_frame(name=syms[0])
@@ -97,7 +96,7 @@ def _extract_close_prices(raw: pd.DataFrame, symbols: list) -> pd.DataFrame:
     else:
         if "Close" not in raw.columns:
             return pd.DataFrame(columns=syms)
-        col = raw["Close"]
+        col   = raw["Close"]
         panel = col.to_frame(name=syms[0]) if isinstance(col, pd.Series) else col.copy()
         if panel.shape[1] == 1 and syms:
             panel.columns = [syms[0]]
@@ -126,13 +125,13 @@ def orthogonalize_factors(raw_factor_df: pd.DataFrame) -> pd.DataFrame:
             f"(rows={df.shape[0]}, factors={len(cols)})."
         )
 
-    ortho_df = pd.DataFrame(index=df.index)
+    ortho_df          = pd.DataFrame(index=df.index)
     ortho_df[cols[0]] = df[cols[0]]  # Market anchor — unchanged
 
     for i in range(1, len(cols)):
-        y = df[cols[i]]
+        y       = df[cols[i]]
         X_prior = sm.add_constant(ortho_df.iloc[:, :i])
-        resid = sm.OLS(y, X_prior).fit().resid
+        resid   = sm.OLS(y, X_prior).fit().resid
         ortho_df[cols[i]] = resid
 
     return ortho_df
@@ -152,22 +151,22 @@ with hdr_col:
 with logo_col:
     if LOGO_PATH:
         st.image(LOGO_PATH, width=80)
+
 # ==========================================
 # 2. Portfolio Data Ingestion (Public CSV Bypass)
 # ==========================================
 st.sidebar.header("Portfolio Parameters")
 
-# The specific ID of your Google Sheet
 sheet_id = "11Fpu0mz2JevRHzqrvgR-TrC78qbALWAS1Yp8C2gEi4U"
-# The specific GID of the active tab
-tab_gid = "418083832"
-# Format as a direct CSV download link
-csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={tab_gid}"
+tab_gid  = "418083832"
+csv_url  = (
+    f"https://docs.google.com/spreadsheets/d/{sheet_id}"
+    f"/export?format=csv&gid={tab_gid}"
+)
 
 try:
     with st.spinner("Fetching active portfolio data..."):
-        # Read directly via pandas, bypassing Google API authentication
-        portfolio_data = pd.read_csv(csv_url)
+        portfolio_data         = pd.read_csv(csv_url)
         portfolio_data.columns = portfolio_data.columns.str.strip()
 
         df = portfolio_data[['Date', 'Ticker', 'Value', '% Return']].copy()
@@ -221,21 +220,22 @@ start_date = end_date - datetime.timedelta(days=365 * lookback_years)
 mag7_components = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA']
 
 standard_proxies = {
-    'Market (Beta)'          : 'SPY',   
-    'Size (Small Cap)'       : 'IWM',   
-    'Value'                  : 'IWD',   
-    'Growth'                 : 'IWF',   
-    'Momentum'               : 'MTUM',  
-    'Quality'                : 'QUAL',  
-    'Oil Prices'             : 'USO',   
-    'Interest Rates (7-10y)' : 'IEF',   
-    'Gold'                   : 'GLD',   
-    'US Dollar'              : 'UUP',   
+    'Market (Beta)'          : 'SPY',
+    'Size (Small Cap)'       : 'IWM',
+    'Value'                  : 'IWD',
+    'Growth'                 : 'IWF',
+    'Momentum'               : 'MTUM',
+    'Quality'                : 'QUAL',
+    'Oil Prices'             : 'USO',
+    'Interest Rates (7-10y)' : 'IEF',
+    'Gold'                   : 'GLD',
+    'US Dollar'              : 'UUP',
 }
+
 
 @st.cache_data
 def load_deep_history(port_tickers, factor_dict, mag7_tickers):
-    raw_syms = port_tickers + list(factor_dict.values()) + list(mag7_tickers)
+    raw_syms    = port_tickers + list(factor_dict.values()) + list(mag7_tickers)
     all_symbols = list(dict.fromkeys(_yahoo_symbol(s) for s in raw_syms))
 
     raw = pd.DataFrame()
@@ -259,10 +259,13 @@ def load_deep_history(port_tickers, factor_dict, mag7_tickers):
     data = data.ffill()
     data.index = data.index.tz_localize(None)
 
-    returns_df = np.log(data / data.shift(1))
-    mag7_cols = [_yahoo_symbol(m) for m in mag7_tickers]
-    returns_df["Mag_7_Proxy"] = returns_df.reindex(columns=mag7_cols)[mag7_cols].mean(axis=1)
+    returns_df        = np.log(data / data.shift(1))
+    mag7_cols         = [_yahoo_symbol(m) for m in mag7_tickers]
+    returns_df["Mag_7_Proxy"] = (
+        returns_df.reindex(columns=mag7_cols)[mag7_cols].mean(axis=1)
+    )
     return returns_df
+
 
 with st.spinner("Compiling historical market and factor data..."):
     full_returns = load_deep_history(tickers, standard_proxies, mag7_components)
@@ -274,64 +277,30 @@ if full_returns is None or full_returns.empty:
     )
     st.stop()
 
-# #region agent log
-import json as _agent_json
-import time as _agent_time
-
-try:
-    _g = globals()
-    with open("/Users/chipkoch/Desktop/.cursor/debug-b93751.log", "a") as _agent_f:
-        _agent_f.write(
-            _agent_json.dumps(
-                {
-                    "sessionId": "b93751",
-                    "runId": "post-fix",
-                    "hypothesisId": "H1-H3",
-                    "location": "risk1.py:before_regression_slice",
-                    "message": "globals_and_returns_shape",
-                    "data": {
-                        "has_start_date": "start_date" in _g,
-                        "has_end_date": "end_date" in _g,
-                        "has_lookback_years": "lookback_years" in _g,
-                        "has_confidence_level": "confidence_level" in _g,
-                        "has_rf_rate": "rf_rate" in _g,
-                        "full_returns_rows": int(getattr(full_returns, "shape", (0,))[0]),
-                        "full_returns_cols": int(getattr(full_returns, "shape", (0, 0))[1]),
-                    },
-                    "timestamp": int(_agent_time.time() * 1000),
-                }
-            )
-            + "\n"
-        )
-except Exception:
-    pass
-# #endregion
-
-factor_proxies = standard_proxies.copy()
+factor_proxies               = standard_proxies.copy()
 factor_proxies['Mag 7 Exposure'] = 'Mag_7_Proxy'
-factor_names = list(factor_proxies.keys())
-factor_cols = list(factor_proxies.values())
+factor_names                 = list(factor_proxies.keys())
+factor_cols                  = list(factor_proxies.values())
 
-_reg_start = pd.to_datetime(start_date)
-_reg_end = pd.to_datetime(end_date)
-window = full_returns.sort_index().loc[_reg_start:_reg_end].copy()
-
+_reg_start      = pd.to_datetime(start_date)
+_reg_end        = pd.to_datetime(end_date)
+window          = full_returns.sort_index().loc[_reg_start:_reg_end].copy()
 factor_cols_use = [_window_factor_col(c) for c in factor_cols]
-missing_factors = [c for c, w in zip(factor_cols, factor_cols_use) if w not in window.columns]
+
+missing_factors = [c for c, w in zip(factor_cols, factor_cols_use)
+                   if w not in window.columns]
 if missing_factors:
     st.error(
         "One or more factor series are missing from the Yahoo download. "
         f"Missing: {missing_factors}. "
-        f"Sample columns: {list(window.columns)[:30]}…"
+        f"Sample columns: {list(window.columns)[:30]}..."
     )
     st.stop()
 
-ts_tickers = [
-    t
-    for t in tickers
-    if t in window.columns and window[t].notna().any()
-]
+ts_tickers = [t for t in tickers
+              if t in window.columns and window[t].notna().any()]
 missing_px = [t for t in tickers if t not in ts_tickers]
+
 if missing_px:
     st.warning(
         "No usable Yahoo price history in this window for: "
@@ -371,16 +340,14 @@ if regression_returns.shape[0] < min_obs:
     )
     st.stop()
 
-w_ts = np.array([weights[tickers.index(t)] for t in ts_tickers])
-w_ts = w_ts / w_ts.sum()
-
+w_ts                   = np.array([weights[tickers.index(t)] for t in ts_tickers])
+w_ts                   = w_ts / w_ts.sum()
 port_component_returns = regression_returns[ts_tickers]
-portfolio_returns = port_component_returns.dot(w_ts)
+portfolio_returns      = port_component_returns.dot(w_ts)
 
-raw_factor_returns = regression_returns[factor_cols_use].copy()
+raw_factor_returns         = regression_returns[factor_cols_use].copy()
 raw_factor_returns.columns = factor_names
 
-# Orthogonalized factor returns
 with st.spinner("Orthogonalizing factors..."):
     try:
         ortho_factor_returns = orthogonalize_factors(raw_factor_returns)
@@ -430,11 +397,9 @@ st.divider()
 # ==========================================
 st.header("2. Factor Risk Decomposition")
 
-
 # ---- OLS on ORTHOGONALIZED factors ----
-X_ortho  = ortho_factor_returns.copy()
-X_const  = sm.add_constant(X_ortho)
-
+X_ortho    = ortho_factor_returns.copy()
+X_const    = sm.add_constant(X_ortho)
 port_model = sm.OLS(portfolio_returns, X_const).fit(cov_type='HC3')
 
 factor_results = pd.DataFrame({
@@ -448,7 +413,7 @@ vif_values = [variance_inflation_factor(X_const.values, i + 1)
               for i in range(X_ortho.shape[1])]
 
 vif_df = pd.DataFrame({
-    'Factor'  : factor_names,
+    'Factor'              : factor_names,
     'VIF (Raw Factors)'   : [variance_inflation_factor(
                                 sm.add_constant(raw_factor_returns).values, i + 1)
                              for i in range(raw_factor_returns.shape[1])],
@@ -545,18 +510,19 @@ with st.expander("Multicollinearity: VIF Before and After Orthogonalization"):
         )
     with c_vif2:
         st.markdown("""
-    **VIF Reference**
-    | Range  | Assessment         |
-    |--------|--------------------|
-    | < 5    | Low — no issue     |
-    | 5–10   | Moderate — monitor |
-    | > 10   | High — review      |
+**VIF Reference**
 
-    After orthogonalization, all VIFs
-    collapse toward 1.0 by
-    construction — confirming each
-    factor is independent.
-    """)
+| Range  | Assessment         |
+|--------|--------------------|
+| < 5    | Low — no issue     |
+| 5–10   | Moderate — monitor |
+| > 10   | High — review      |
+
+After orthogonalization, all VIFs
+collapse toward 1.0 by
+construction — confirming each
+factor is independent.
+""")
 
 # ---- Factor vs. Idiosyncratic Risk Decomposition ----
 st.subheader("Factor vs. Idiosyncratic Risk Decomposition")
@@ -571,16 +537,13 @@ idio_label = "Stock-picker driven" if pct_idio > 0.35 else "Factor / market driv
 rd4.metric("Risk Character", idio_label,
            delta=f"Specific ratio: {pct_idio*100:.1f}%")
 
-# Scaled stacked horizontal bar decomposition
 fig_rd, ax_rd = styled_fig((9, 2.2))
-
 bar_height = 0.42
-segments = [
+segments   = [
     (pct_factor,   COLORS['NAVY'], f"Factor Risk\n{pct_factor*100:.1f}%"),
     (pct_idio,     COLORS['RED'],  f"Idiosyncratic\n{pct_idio*100:.1f}%"),
     (pct_residual, COLORS['GRID'], f"Residual\n{pct_residual*100:.1f}%"),
 ]
-
 left = 0.0
 for pct, color, label in segments:
     if pct > 0.001:
@@ -588,8 +551,7 @@ for pct, color, label in segments:
                    color=color, edgecolor=COLORS['BG'], linewidth=1.0)
         if pct > 0.05:
             ax_rd.text(left + pct / 2, 0, label,
-                       ha='center', va='center', fontsize=8.5,
-                       fontweight='bold',
+                       ha='center', va='center', fontsize=8.5, fontweight='bold',
                        color=COLORS['BG'] if color != COLORS['GRID'] else COLORS['SLATE'])
         left += pct
 
@@ -604,14 +566,9 @@ ax_rd.set_yticks([])
 ax_rd.spines['left'].set_visible(False)
 ax_rd.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x*100:.0f}%"))
 ax_rd.tick_params(axis='x', labelsize=8)
-
-for boundary, label in [
-    (pct_factor,              f"{factor_vol*100:.1f}%\nvol"),
-    (pct_factor + pct_idio,   f"{idio_vol*100:.1f}%\nvol"),
-]:
+for boundary in [pct_factor, pct_factor + pct_idio]:
     ax_rd.axvline(boundary, color=COLORS['SLATE'], linewidth=0.7,
                   linestyle=':', ymin=0.05, ymax=0.95)
-
 plt.tight_layout()
 st.pyplot(fig_rd)
 plt.close()
@@ -632,7 +589,8 @@ annual_return   = float(portfolio_returns.mean()) * 252
 sharpe       = (annual_return - rf_rate) / port_volatility if port_volatility > 0 else np.nan
 downside     = portfolio_returns[portfolio_returns < 0]
 downside_std = float(np.std(downside)) * np.sqrt(252) if len(downside) > 1 else np.nan
-sortino      = (annual_return - rf_rate) / downside_std if (downside_std and downside_std > 0) else np.nan
+sortino      = ((annual_return - rf_rate) / downside_std
+                if (downside_std and downside_std > 0) else np.nan)
 
 cum_ret      = (1 + portfolio_returns).cumprod()
 rolling_max  = cum_ret.cummax()
@@ -652,9 +610,9 @@ m5.metric("Sharpe Ratio",              f"{sharpe:.2f}",
           help=f"(Return - Rf) / Vol  |  Rf = {rf_rate*100:.2f}%")
 m6.metric("Sortino Ratio",             f"{sortino:.2f}",
           help="(Return - Rf) / Downside Vol — penalises negative returns only")
-
-m7.metric("Max Drawdown", f"{max_drawdown*100:.2f}%")
-m8.metric("Calmar Ratio", f"{calmar:.2f}", help="Annualised Return / |Max Drawdown|")
+m7.metric("Max Drawdown",              f"{max_drawdown*100:.2f}%")
+m8.metric("Calmar Ratio",              f"{calmar:.2f}",
+          help="Annualised Return / |Max Drawdown|")
 
 st.divider()
 
@@ -699,7 +657,6 @@ plt.tight_layout()
 st.pyplot(fig_quilt)
 plt.close()
 
-# ---- Factor correlation matrix — (In an expander) ----
 with st.expander("Factor Correlation Matrix — Post-Orthogonalization (Target: Near-Diagonal)"):
     std_diag    = np.sqrt(np.maximum(np.diag(F_cov_shrunk), 1e-12))
     F_corr_norm = F_cov_shrunk / np.outer(std_diag, std_diag)
@@ -708,7 +665,6 @@ with st.expander("Factor Correlation Matrix — Post-Orthogonalization (Target: 
 
     fig_corr, ax_corr = plt.subplots(figsize=(11, 8))
     fig_corr.patch.set_facecolor(COLORS['BG'])
-
     sns.heatmap(
         F_corr_df,
         annot=True, fmt=".2f",
@@ -778,34 +734,345 @@ if not stress_df.empty:
 st.divider()
 
 # ==========================================
-# 9. Forward-Looking Investment Pitch
+# 9. Manager Evaluation — Benchmark-Relative Metrics & Risk Scorecard
+#    Benchmark: ACWI (iShares MSCI ACWI ETF — closest free proxy for MSCI ACWI IMI)
+#    Portfolio classification: Concentrated / High-Conviction
 # ==========================================
-st.header("6. Forward-Looking Investment Pitch")
-st.markdown("Quarterly Factor Outlook and Allocation Recommendations")
+st.header("6. Manager Evaluation — Benchmark-Relative Risk Assessment")
+st.caption(
+    "Benchmark: ACWI (iShares MSCI ACWI ETF) — used as a practical proxy for MSCI ACWI IMI. "
+    "Scoring thresholds are calibrated for a concentrated, high-conviction portfolio."
+)
 
-top_4_factors = factor_results.sort_values(
-    by='Factor Sensitivities (Beta)', key=abs, ascending=False
-).head(4)
-recent_quarter_returns = ortho_factor_returns[top_4_factors.index].tail(63).sum()
 
-st.write("**Top 4 Factor Exposures by Absolute Beta:**")
-st.dataframe(top_4_factors.style.format({
-    'Factor Sensitivities (Beta)': '{:.2f}',
-    'P-Value'                    : '{:.4f}',
-}), use_container_width=True)
+@st.cache_data
+def load_benchmark(start: str, end: str) -> pd.Series:
+    raw  = yf.download("ACWI", start=start, end=end, progress=False, threads=False)
+    data = _extract_close_prices(raw, ["ACWI"])
+    if data.empty:
+        return pd.Series(dtype=float)
+    data = data.sort_index().ffill()
+    data.index = data.index.tz_localize(None)
+    return np.log(data["ACWI"] / data["ACWI"].shift(1)).dropna()
 
-st.write("**Trailing Quarterly Momentum — Orthogonalized Factors (63-day log return):**")
-qtr_colors = [COLORS['NAVY'] if v >= 0 else COLORS['RED']
-              for v in recent_quarter_returns.values]
-fig_qtr, ax_qtr = styled_fig((8, 4))
-ax_qtr.bar(recent_quarter_returns.index, recent_quarter_returns.values * 100,
-           color=qtr_colors, edgecolor=COLORS['BG'], linewidth=0.5)
-ax_qtr.axhline(0, color=COLORS['SLATE'], linewidth=0.8, linestyle='--')
-ax_qtr.set_ylabel("63-Day Log Return (%)", fontsize=9)
-ax_qtr.set_title("Trailing Quarterly Factor Momentum (Pure Factor Returns)",
-                 fontsize=11, fontweight='bold', color=COLORS['NAVY'], pad=10)
-ax_qtr.tick_params(axis='x', rotation=20, labelsize=9)
-ax_qtr.tick_params(axis='y', labelsize=8)
-plt.tight_layout()
-st.pyplot(fig_qtr)
-plt.close()
+
+with st.spinner("Fetching benchmark (ACWI) data..."):
+    bench_daily = load_benchmark(
+        str(start_date - datetime.timedelta(days=10)), str(end_date)
+    )
+
+if bench_daily.empty:
+    st.error("Could not load ACWI benchmark data from Yahoo Finance. Try reloading.")
+    st.stop()
+
+# Align daily returns
+common_idx    = portfolio_returns.index.intersection(bench_daily.index)
+port_aligned  = portfolio_returns.reindex(common_idx)
+bench_aligned = bench_daily.reindex(common_idx)
+
+# Monthly returns (sum of log returns within month)
+port_monthly  = port_aligned.resample("ME").sum()
+bench_monthly = bench_aligned.resample("ME").sum()
+common_months = port_monthly.index.intersection(bench_monthly.index)
+port_m        = port_monthly.reindex(common_months)
+bench_m       = bench_monthly.reindex(common_months)
+alpha_m       = port_m - bench_m
+
+# ---- Core 5 Metric Calculations ----
+
+# 1. Tracking Error
+daily_excess   = port_aligned - bench_aligned
+tracking_error = float(daily_excess.std() * np.sqrt(252))
+
+# 2. Hit Rate
+hit_rate = float((alpha_m > 0).mean()) if len(alpha_m) > 0 else np.nan
+
+# 3. Slugging
+pos_alpha = alpha_m[alpha_m > 0]
+neg_alpha = alpha_m[alpha_m < 0]
+slugging  = (float(pos_alpha.mean()) / abs(float(neg_alpha.mean()))
+             if len(pos_alpha) > 0 and len(neg_alpha) > 0 else np.nan)
+
+# 4. Up Capture
+up_months  = bench_m[bench_m > 0]
+up_capture = (float(port_m.reindex(up_months.index).mean()) / float(up_months.mean())
+              if len(up_months) > 0 else np.nan)
+
+# 5. Down Capture
+down_months  = bench_m[bench_m < 0]
+down_capture = (float(port_m.reindex(down_months.index).mean()) / float(down_months.mean())
+                if len(down_months) > 0 else np.nan)
+
+# ---- Benchmark-Relative Metrics Table ----
+st.subheader("Benchmark-Relative Metrics")
+
+n_months     = len(common_months)
+metrics_data = {
+    "Metric"     : ["Tracking Error", "Hit Rate", "Slugging Ratio",
+                    "Up Capture", "Down Capture"],
+    "Value"      : [
+        f"{tracking_error*100:.2f}%",
+        f"{hit_rate*100:.1f}%"        if not np.isnan(hit_rate)     else "N/A",
+        f"{slugging:.2f}x"            if not np.isnan(slugging)     else "N/A",
+        f"{up_capture*100:.1f}%"      if not np.isnan(up_capture)   else "N/A",
+        f"{down_capture*100:.1f}%"    if not np.isnan(down_capture) else "N/A",
+    ],
+    "Definition" : [
+        "Annualised vol of daily excess returns vs ACWI",
+        "% of months portfolio outperforms ACWI",
+        "Avg win alpha / avg loss alpha — how much bigger are wins than losses",
+        "Avg portfolio return in up-benchmark months / avg benchmark return",
+        "Avg portfolio return in down-benchmark months / avg benchmark return",
+    ],
+    "Concentrated Benchmark": [
+        "4–15% expected",
+        ">50% acceptable; >55% strong",
+        ">1.5x strong; >1.75x very strong",
+        ">100% ideal",
+        "<100% ideal; <90% strong",
+    ],
+}
+st.dataframe(pd.DataFrame(metrics_data), use_container_width=True, hide_index=True)
+st.caption(f"Calculated over {n_months} months of overlapping data (ACWI proxy for MSCI ACWI IMI).")
+
+# ---- Scoring Functions (Concentrated / High-Conviction thresholds) ----
+
+def score_tracking_error(te: float) -> float:
+    te_pct = te * 100
+    if   te_pct >= 6  and te_pct <= 15: return 9.0
+    elif te_pct >= 4  and te_pct <  6:  return 7.0
+    elif te_pct > 15  and te_pct <= 20: return 6.0
+    elif te_pct >= 2  and te_pct <  4:  return 4.0
+    elif te_pct > 20:                   return 3.0
+    else:                               return 2.0
+
+def score_hit_rate(hr: float) -> float:
+    hr_pct = hr * 100
+    if   hr_pct >= 55: return 9.5
+    elif hr_pct >= 50: return 7.5
+    elif hr_pct >= 45: return 5.5
+    elif hr_pct >= 40: return 3.5
+    else:              return 2.0
+
+def score_slugging(sl: float) -> float:
+    if   sl >= 2.00: return 10.0
+    elif sl >= 1.75: return 8.5
+    elif sl >= 1.50: return 7.0
+    elif sl >= 1.25: return 5.0
+    elif sl >= 1.00: return 3.0
+    else:            return 1.5
+
+def score_up_capture(uc: float) -> float:
+    uc_pct = uc * 100
+    if   uc_pct >= 105: return 10.0
+    elif uc_pct >= 100: return 8.5
+    elif uc_pct >= 90:  return 6.5
+    elif uc_pct >= 80:  return 4.0
+    else:               return 2.0
+
+def score_down_capture(dc: float) -> float:
+    dc_pct = dc * 100
+    if   dc_pct <= 80:  return 10.0
+    elif dc_pct <= 90:  return 8.5
+    elif dc_pct <= 100: return 7.0
+    elif dc_pct <= 110: return 4.5
+    else:               return 2.0
+
+def score_idio_pct(idio: float) -> float:
+    idio_pct = idio * 100
+    if   idio_pct >= 70: return 10.0
+    elif idio_pct >= 60: return 8.0
+    elif idio_pct >= 50: return 6.0
+    elif idio_pct >= 40: return 4.0
+    else:                return 2.0
+
+# ---- Compute component scores ----
+s_te   = score_tracking_error(tracking_error) if not np.isnan(tracking_error) else 5.0
+s_hr   = score_hit_rate(hit_rate)             if not np.isnan(hit_rate)        else 5.0
+s_sl   = score_slugging(slugging)             if not np.isnan(slugging)        else 5.0
+s_uc   = score_up_capture(up_capture)         if not np.isnan(up_capture)      else 5.0
+s_dc   = score_down_capture(down_capture)     if not np.isnan(down_capture)    else 5.0
+s_idio = score_idio_pct(pct_idio)
+
+# Weights — calibrated for concentrated / high-conviction portfolio
+SCORE_WEIGHTS = {
+    "Idiosyncratic Risk %": 0.25,
+    "Slugging Ratio"      : 0.25,
+    "Up Capture"          : 0.15,
+    "Down Capture"        : 0.15,
+    "Hit Rate"            : 0.10,
+    "Tracking Error"      : 0.10,
+}
+component_scores = {
+    "Idiosyncratic Risk %": s_idio,
+    "Slugging Ratio"      : s_sl,
+    "Up Capture"          : s_uc,
+    "Down Capture"        : s_dc,
+    "Hit Rate"            : s_hr,
+    "Tracking Error"      : s_te,
+}
+overall_score = sum(
+    component_scores[k] * SCORE_WEIGHTS[k] for k in SCORE_WEIGHTS
+)
+
+# ---- Scorecard Display ----
+st.subheader("Risk Scorecard — Concentrated Manager Evaluation")
+
+score_col, breakdown_col = st.columns([1, 2])
+
+with score_col:
+    if   overall_score >= 8.0: band, band_color = "Strong",   COLORS['NAVY']
+    elif overall_score >= 6.0: band, band_color = "Adequate", COLORS['SLATE']
+    elif overall_score >= 4.0: band, band_color = "Weak",     COLORS['RED']
+    else:                      band, band_color = "Poor",      COLORS['RED']
+
+    fig_gauge, ax_gauge = plt.subplots(figsize=(3.8, 3.8))
+    fig_gauge.patch.set_facecolor(COLORS['BG'])
+    ax_gauge.set_facecolor(COLORS['BG'])
+
+    theta = np.linspace(0, 2 * np.pi, 300)
+    ax_gauge.plot(np.cos(theta), np.sin(theta),
+                  color=COLORS['GRID'], linewidth=14, solid_capstyle='round')
+
+    arc_frac  = overall_score / 10.0
+    arc_theta = np.linspace(np.pi / 2, np.pi / 2 - 2 * np.pi * arc_frac, 300)
+    ax_gauge.plot(np.cos(arc_theta), np.sin(arc_theta),
+                  color=band_color, linewidth=14, solid_capstyle='round')
+
+    ax_gauge.text(0, 0.12, f"{overall_score:.1f}",
+                  ha='center', va='center', fontsize=32,
+                  fontweight='bold', color=COLORS['NAVY'])
+    ax_gauge.text(0, -0.28, "/ 10",
+                  ha='center', va='center', fontsize=13, color=COLORS['SLATE'])
+    ax_gauge.text(0, -0.62, band,
+                  ha='center', va='center', fontsize=12,
+                  fontweight='bold', color=band_color)
+
+    ax_gauge.set_xlim(-1.35, 1.35)
+    ax_gauge.set_ylim(-1.35, 1.35)
+    ax_gauge.set_aspect('equal')
+    ax_gauge.axis('off')
+    ax_gauge.set_title("Overall Score", fontsize=11,
+                       fontweight='bold', color=COLORS['NAVY'], pad=8)
+    plt.tight_layout()
+    st.pyplot(fig_gauge)
+    plt.close()
+
+with breakdown_col:
+    labels     = list(component_scores.keys())
+    scores     = list(component_scores.values())
+    wt_labels  = [SCORE_WEIGHTS[l] for l in labels]
+    bar_colors = [COLORS['NAVY'] if s >= 7.0
+                  else (COLORS['SLATE'] if s >= 5.0 else COLORS['RED'])
+                  for s in scores]
+
+    fig_comp, ax_comp = styled_fig((7, 4))
+    y_pos = np.arange(len(labels))
+
+    ax_comp.barh(y_pos, [10] * len(labels), height=0.55,
+                 color=COLORS['GRID'], edgecolor=COLORS['BG'])
+    ax_comp.barh(y_pos, scores, height=0.55,
+                 color=bar_colors, edgecolor=COLORS['BG'])
+
+    for i, (s, w) in enumerate(zip(scores, wt_labels)):
+        ax_comp.text(s + 0.2, i, f"{s:.1f}  (wt: {w*100:.0f}%)",
+                     va='center', fontsize=8.5, color=COLORS['NAVY'])
+
+    ax_comp.set_yticks(y_pos)
+    ax_comp.set_yticklabels(labels, fontsize=9)
+    ax_comp.set_xlim(0, 13)
+    ax_comp.set_xlabel("Component Score (out of 10)", fontsize=9)
+    ax_comp.set_title("Component Score Breakdown",
+                      fontsize=11, fontweight='bold', color=COLORS['NAVY'], pad=10)
+
+    for xval, lbl in [(7.0, "Strong"), (5.0, "Adequate")]:
+        ax_comp.axvline(xval, color=COLORS['SLATE'], linewidth=0.8,
+                        linestyle='--', alpha=0.6)
+        ax_comp.text(xval + 0.1, len(labels) - 0.35, lbl,
+                     fontsize=7.5, color=COLORS['SLATE'], va='top')
+
+    ax_comp.tick_params(axis='x', labelsize=8)
+    ax_comp.invert_yaxis()
+    plt.tight_layout()
+    st.pyplot(fig_comp)
+    plt.close()
+
+# ---- Narrative summary ----
+st.subheader("Summary Assessment")
+
+narratives = []
+
+if s_idio >= 8:
+    narratives.append(
+        f"Idiosyncratic risk is {pct_idio*100:.1f}% of total variance — above the 60-70% target "
+        "for concentrated managers, confirming returns are driven by stock selection rather than factor exposure."
+    )
+elif s_idio >= 6:
+    narratives.append(
+        f"Idiosyncratic risk is {pct_idio*100:.1f}% of total variance — within an acceptable range "
+        "for concentrated managers, though closer to the 65-70% target would be preferred."
+    )
+else:
+    narratives.append(
+        f"Idiosyncratic risk is {pct_idio*100:.1f}% of total variance — below the 60-70% threshold "
+        "expected for concentrated managers. A larger share of risk is explained by factor exposure "
+        "rather than stock selection."
+    )
+
+if not np.isnan(slugging):
+    if s_sl >= 8:
+        narratives.append(
+            f"Slugging ratio of {slugging:.2f}x is strong — average winning months outperform "
+            "losing months by a wide margin, consistent with a high-conviction approach."
+        )
+    elif s_sl >= 6:
+        narratives.append(
+            f"Slugging ratio of {slugging:.2f}x is moderate — wins are larger than losses "
+            "but not by enough to fully compensate for a lower hit rate."
+        )
+    else:
+        narratives.append(
+            f"Slugging ratio of {slugging:.2f}x is below target. For a concentrated manager "
+            "with a lower hit rate, this needs to be above 1.5x to justify the approach."
+        )
+
+if not np.isnan(up_capture) and not np.isnan(down_capture):
+    uc_pct = up_capture   * 100
+    dc_pct = down_capture * 100
+    if uc_pct >= 100 and dc_pct <= 100:
+        narratives.append(
+            f"Capture ratio profile is favourable: Up Capture of {uc_pct:.1f}% and "
+            f"Down Capture of {dc_pct:.1f}% — capturing more upside than downside vs ACWI."
+        )
+    elif uc_pct < 100 and dc_pct > 100:
+        narratives.append(
+            f"Capture profile is unfavourable: Up Capture of {uc_pct:.1f}% and Down Capture "
+            f"of {dc_pct:.1f}% — the portfolio gives back more on the downside than it gains "
+            "on the upside. This is the combination flagged as a red flag by the risk manager."
+        )
+    else:
+        narratives.append(
+            f"Up Capture is {uc_pct:.1f}% and Down Capture is {dc_pct:.1f}% vs ACWI. "
+            "Monitoring this relationship over time is important."
+        )
+
+if not np.isnan(hit_rate):
+    hr_pct = hit_rate * 100
+    if hr_pct >= 55:
+        narratives.append(
+            f"Hit Rate of {hr_pct:.1f}% is above the 55% threshold — the portfolio outperforms "
+            "the benchmark in the majority of months."
+        )
+    elif hr_pct >= 45:
+        narratives.append(
+            f"Hit Rate of {hr_pct:.1f}% is acceptable for a concentrated strategy, provided "
+            "the slugging ratio compensates for the months of underperformance."
+        )
+    else:
+        narratives.append(
+            f"Hit Rate of {hr_pct:.1f}% is below 45% — the portfolio underperforms ACWI "
+            "in more than half of months. This is only acceptable if the slugging ratio is very high."
+        )
+
+for para in narratives:
+    st.markdown(f"- {para}")
