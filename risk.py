@@ -966,7 +966,18 @@ with breakdown_col:
                   else (COLORS['SLATE'] if s >= 5.0 else COLORS['RED'])
                   for s in scores]
 
-    fig_comp, ax_comp = styled_fig((7, 4))
+    # Map each component to its actual underlying metric value
+    actual_values = {
+        "Idiosyncratic Risk %": f"{pct_idio*100:.1f}%",
+        "Slugging Ratio"      : f"{slugging:.2f}x"           if not np.isnan(slugging)       else "N/A",
+        "Up Capture"          : f"{up_capture*100:.1f}%"     if not np.isnan(up_capture)     else "N/A",
+        "Down Capture"        : f"{down_capture*100:.1f}%"   if not np.isnan(down_capture)   else "N/A",
+        "Hit Rate"            : f"{hit_rate*100:.1f}%"       if not np.isnan(hit_rate)       else "N/A",
+        "Tracking Error"      : f"{tracking_error*100:.2f}%" if not np.isnan(tracking_error) else "N/A",
+    }
+    display_labels = [f"{lbl}\n({actual_values.get(lbl, '')})" for lbl in labels]
+
+    fig_comp, ax_comp = styled_fig((7, 4.5))
     y_pos = np.arange(len(labels))
 
     ax_comp.barh(y_pos, [10] * len(labels), height=0.55,
@@ -979,7 +990,7 @@ with breakdown_col:
                      va='center', fontsize=8.5, color=COLORS['NAVY'])
 
     ax_comp.set_yticks(y_pos)
-    ax_comp.set_yticklabels(labels, fontsize=9)
+    ax_comp.set_yticklabels(display_labels, fontsize=9)
     ax_comp.set_xlim(0, 13)
     ax_comp.set_xlabel("Component Score (out of 10)", fontsize=9)
     ax_comp.set_title("Component Score Breakdown",
