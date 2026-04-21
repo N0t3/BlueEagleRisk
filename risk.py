@@ -11,7 +11,7 @@ import datetime
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
 import seaborn as sns
 
 # ==========================================
@@ -38,7 +38,15 @@ plt.rcParams['grid.color']       = COLORS['GRID']
 plt.rcParams['grid.linewidth']   = 0.6
 
 DIVERGING_CMAP = LinearSegmentedColormap.from_list(
-    'bec_diverging', [COLORS['RED'], '#f5f5f5', COLORS['NAVY']]
+    'bec_diverging_soft',
+    [
+        (0.00, COLORS['RED']),
+        (0.47, '#f3c892'),
+        (0.50, '#ffffff'),
+        (0.53, '#c7d4e5'),
+        (1.00, COLORS['NAVY'])
+    ],
+    N=256
 )
 
 # ==========================================
@@ -501,11 +509,13 @@ with col4:
 with st.expander("Multicollinearity: VIF Before and After Orthogonalization"):
     c_vif1, c_vif2 = st.columns([3, 1])
     with c_vif1:
+        vif_display = vif_df.copy()
+        vif_display['VIF (Raw Factors)'] = vif_display['VIF (Raw Factors)'].round(2)
+        vif_display['VIF (Orthogonalized)'] = vif_display['VIF (Orthogonalized)'].round(2)
         st.dataframe(
-            vif_df.style
-                  .format({'VIF (Raw Factors)': '{:.2f}', 'VIF (Orthogonalized)': '{:.2f}'})
-                  .background_gradient(subset=['VIF (Raw Factors)'],    cmap='YlOrRd')
-                  .background_gradient(subset=['VIF (Orthogonalized)'], cmap='YlGn_r'),
+            vif_display.style
+                .background_gradient(subset=['VIF (Raw Factors)'], cmap='YlOrRd')
+                .apply(lambda s: ['background-color: #d9f99d'] * len(s), subset=['VIF (Orthogonalized)']),
             use_container_width=True,
         )
     with c_vif2:
@@ -631,17 +641,23 @@ fig_quilt, ax_quilt = plt.subplots(
     figsize=(max(16, len(factor_names) * 1.3), max(6, len(tickers) * 0.7))
 )
 fig_quilt.patch.set_facecolor(COLORS['BG'])
+abs_max = np.nanpercentile(np.abs(quilt_df.values), 95)
+abs_max = max(abs_max, 0.25)
+norm = TwoSlopeNorm(vmin=-abs_max, vcenter=0, vmax=abs_max)
 
 sns.heatmap(
     quilt_df,
     annot=True, fmt=".2f",
     cmap=DIVERGING_CMAP,
-    center=0,
-    linewidths=0.6, linecolor=COLORS['GRID'],
+    norm=norm,
+    linewidths=0.8, linecolor=COLORS['GRID'],
     ax=ax_quilt,
-    cbar_kws={'label': 'Factor Beta', 'shrink': 0.65},
+    cbar_kws={'label': 'Factor Beta', 'shrink': 0.75},
     annot_kws={"size": 8, "weight": "bold", "color": COLORS['BG']},
 )
+
+for text, val in zip(ax_quilt.texts, quilt_df.to_numpy().ravel()):
+    text.set_color('white' if abs(val) >= abs_max * 0.45 else '#0f172a')
 ax_quilt.set_title(
     "Factor Exposure Quilt: Per-Stock Pure Beta Loadings (Orthogonalized Factors)",
     fontsize=13, fontweight='bold', color=COLORS['NAVY'], pad=14,
